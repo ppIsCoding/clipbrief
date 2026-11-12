@@ -64,33 +64,54 @@
 {
   "success": true,
   "data": {
+    "id": "BV1GJ411x7h7",
     "title": "视频标题",
-    "thumbnail": "https://i0.hdslb.com/...",
-    "duration": 632,
+    "thumbnail": "http://i1.hdslb.com/bfs/archive/xxx.jpg",
+    "duration": 212.393,
+    "duration_string": "3:32",
     "uploader": "UP 主昵称",
-    "platform": "bilibili",
-    "video_id": "BV1xx411c7mD",
+    "platform": "BiliBili",
+    "view_count": 108426595,
+    "upload_date": "20191231",
+    "description": "简介前 200 字",
     "formats": [
       {
-        "format_id": "137",
+        "format_id": "bestvideo+bestaudio/best",
         "ext": "mp4",
-        "resolution": "1080p",
-        "filesize": 123456789,
-        "filesize_text": "117.7MB",
-        "has_video": true,
+        "resolution": "1920x1080",
+        "height": 1080,
+        "filesize": 69809437,
+        "filesize_approx": 69809437,
+        "vcodec": "avc1.640032",
+        "acodec": "merged",
+        "has_audio": true,
+        "label": "1080p 最佳 (视频+音频合并)"
+      },
+      {
+        "format_id": "30064",
+        "ext": "mp4",
+        "resolution": "1280x720",
+        "height": 720,
+        "filesize": 46531934,
+        "filesize_approx": 46531934,
+        "vcodec": "avc1.640028",
+        "acodec": null,
         "has_audio": false,
-        "note": "1080P 视频流"
+        "label": "720p MP4 (仅视频, 44.4MB)"
       }
-    ]
+    ],
+    "subtitles": [],
+    "automatic_captions": []
   }
 }
 ```
 
 说明：
 
-- `formats` 已过滤掉纯音频，最多返回 15 条。
+- `platform` 取 yt-dlp 的 extractor 名（B站是 `BiliBili`），抖音是 `douyin`。
+- `formats` 已过滤纯音频，按清晰度从高到低，最多 15 条；没有带音频的格式时，会自动插入一条 `bestvideo+bestaudio/best` 合并项。
 - `thumbnail` 是源站地址，前端展示时拼 `/api/proxy/thumbnail?url=...`。
-- 抖音链接走 `douyin.py`，返回结构保持一致。
+- `subtitles` / `automatic_captions` 只返回语言列表，不返回内容。
 
 ### POST /download
 
