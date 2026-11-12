@@ -1,5 +1,5 @@
 <template>
-  <div class="bg-white rounded-2xl border border-border shadow-lg overflow-hidden h-full flex flex-col">
+  <div class="relative bg-white rounded-2xl border border-border shadow-lg overflow-hidden h-full flex flex-col">
         <!-- 标签页导航 -->
         <div class="flex border-b border-border-light">
           <button
@@ -19,6 +19,18 @@
               v-if="activeTab === tab.key"
               class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
             ></div>
+          </button>
+        </div>
+
+        <!-- 未登录提示：不自动弹窗，避免挡住下载按钮 -->
+        <div v-if="loginRequired" class="absolute inset-0 z-20 bg-white flex flex-col items-center justify-center px-6 text-center">
+          <p class="text-text-primary font-medium mb-2">登录后可使用 AI 总结</p>
+          <p class="text-sm text-text-secondary mb-5">支持摘要、思维导图和基于字幕的问答</p>
+          <button
+            @click="emit('need-login')"
+            class="px-5 py-2.5 rounded-full text-sm font-medium text-white bg-primary hover:bg-blue-600 transition-colors cursor-pointer"
+          >
+            去登录
           </button>
         </div>
 
@@ -293,6 +305,7 @@ const tabs = [
 const activeTab = ref('summary')
 const loading = ref(false)
 const loadingMessage = ref('正在提取视频字幕...')
+const loginRequired = ref(false)
 
 const summaryText = ref('')
 const subtitleData = ref({ segments: [], has_subtitle: false })
@@ -325,6 +338,13 @@ const subtitleFormats = [
 marked.setOptions({
   breaks: true,
   gfm: true,
+})
+
+watch(() => props.user, (user) => {
+  if (user && loginRequired.value) {
+    loginRequired.value = false
+    startSummarize()
+  }
 })
 
 watch(loading, (val) => {
@@ -645,6 +665,7 @@ const quotaInfo = ref(null)
 
 async function startSummarize() {
   loading.value = true
+  loginRequired.value = false
   summaryText.value = ''
   mindmapMarkdown.value = ''
   quotaInfo.value = null
@@ -680,7 +701,8 @@ async function startSummarize() {
         try {
           const parsed = JSON.parse(data)
           if (parsed.need_login) {
-            emit('need-login')
+            loginRequired.value = true
+            loading.value = false
             return
           }
           alert(parsed.message || '总结失败')
