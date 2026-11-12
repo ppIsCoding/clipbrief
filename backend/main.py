@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
+from starlette.background import BackgroundTask
 
 from database import init_db
 from douyin import DouyinParser, is_douyin_url
@@ -106,6 +107,7 @@ async def download_video(req: DownloadRequest):
             path=filepath,
             filename=result["filename"],
             media_type="application/octet-stream",
+            background=BackgroundTask(os.remove, filepath),
         )
     except HTTPException:
         raise

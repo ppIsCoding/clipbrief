@@ -1,6 +1,7 @@
 import os
 import re
 import shutil
+import uuid
 import yt_dlp
 from typing import Optional
 
@@ -153,9 +154,10 @@ class VideoDownloader:
         if not self.has_ffmpeg and "+" in format_id:
             format_id = "best"
 
+        token = uuid.uuid4().hex[:8]
         ydl_opts = {
             "format": format_id,
-            "outtmpl": os.path.join(self.DOWNLOAD_DIR, "%(title)s.%(ext)s"),
+            "outtmpl": os.path.join(self.DOWNLOAD_DIR, f"%(title)s-{token}.%(ext)s"),
             "quiet": True,
             "no_warnings": True,
             "noplaylist": True,
@@ -164,6 +166,9 @@ class VideoDownloader:
         if self.has_ffmpeg:
             ydl_opts["ffmpeg_location"] = self.ffmpeg_path
             ydl_opts["merge_output_format"] = "mp4"
+
+        if cookies_file := os.getenv("COOKIES_FILE"):
+            ydl_opts["cookiefile"] = cookies_file
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
@@ -174,22 +179,13 @@ class VideoDownloader:
         title = self._sanitize_filename(info.get("title", "video"))
         ext = info.get("ext", "mp4")
         filename = f"{title}.{ext}"
-        filepath = os.path.join(self.DOWNLOAD_DIR, filename)
 
-        if not os.path.exists(filepath):
-            prepared = ydl.prepare_filename(info)
-            if os.path.exists(prepared):
-                filepath = prepared
-                filename = os.path.basename(prepared)
-            else:
-                for f in os.listdir(self.DOWNLOAD_DIR):
-                    if title in f:
-                        filepath = os.path.join(self.DOWNLOAD_DIR, f)
-                        filename = f
-                        break
+        downloaded = [name for name in os.listdir(self.DOWNLOAD_DIR) if token in name]
+        if not downloaded:
+            raise ValueError("下载完成但未找到文件")
 
         return {
-            "filepath": filepath,
+            "filepath": os.path.join(self.DOWNLOAD_DIR, downloaded[0]),
             "filename": filename,
             "title": info.get("title", "video"),
             "ext": ext,
