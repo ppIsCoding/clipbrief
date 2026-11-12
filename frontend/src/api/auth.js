@@ -1,7 +1,7 @@
 import axios from 'axios'
 
-const TOKEN_KEY = 'saveany_token'
-const USER_KEY = 'saveany_user'
+const TOKEN_KEY = 'clipbrief_token'
+const USER_KEY = 'clipbrief_user'
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY)

@@ -3,10 +3,10 @@
     <div class="max-w-5xl mx-auto px-4 sm:px-6">
       <div class="text-center mb-12">
         <h2 id="howto-heading" class="text-2xl sm:text-3xl font-bold text-text-primary mb-3">
-          如何使用 <span class="text-primary">SaveAny</span> 下载视频
+          如何使用 <span class="text-primary">ClipBrief</span> 下载视频
         </h2>
         <p class="text-text-secondary text-base max-w-xl mx-auto">
-          只需 3 步，即可免费下载 YouTube、Bilibili、抖音等 1800+ 平台的视频
+          只需 3 步，即可免费下载 YouTube、Bilibili、抖音等 1700+ 平台的视频
         </p>
       </div>
 
@@ -44,7 +44,7 @@ const steps = [
   {
     number: 2,
     title: '粘贴链接并解析',
-    desc: '打开 SaveAny，将复制的链接粘贴到输入框中，点击"解析视频"。系统自动识别平台并解析出视频信息和所有可用清晰度。',
+    desc: '打开 ClipBrief，将复制的链接粘贴到输入框中，点击"解析视频"。系统自动识别平台并解析出视频信息和所有可用清晰度。',
   },
   {
     number: 3,

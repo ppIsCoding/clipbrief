@@ -14,15 +14,15 @@
           :class="compact ? 'mb-3' : 'mb-6'"
         >
           <span class="w-2 h-2 rounded-full bg-success animate-pulse"></span>
-          支持 1800+ 平台，永久免费使用
+          支持 1700+ 平台，免费使用
         </div>
 
         <h1 :class="compact ? 'text-2xl sm:text-3xl mb-2' : 'text-3xl sm:text-5xl mb-4'" class="font-bold text-text-primary leading-tight">
-          免费在线视频下载器
+          视频下载与 AI 总结工具
           <span class="text-primary">，一键保存</span>
         </h1>
         <p :class="compact ? 'mb-4 text-sm sm:text-base' : 'mb-10 text-base sm:text-lg'" class="text-text-secondary max-w-2xl mx-auto leading-relaxed">
-          粘贴视频链接，智能解析下载。支持 YouTube、Bilibili、抖音、TikTok 等 1800+ 平台，多种清晰度可选，还能 AI 总结视频内容
+          粘贴视频链接，智能解析下载。支持 YouTube、Bilibili、抖音、TikTok 等 1700+ 平台，多种清晰度可选，还能 AI 总结视频内容
         </p>
       </template>
 

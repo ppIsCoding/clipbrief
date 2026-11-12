@@ -1,7 +1,7 @@
 <template>
   <header class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-border-light">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-      <a href="/" class="flex items-center gap-3" title="AI 万能视频下载总结器">
+      <a href="/" class="flex items-center gap-3" title="ClipBrief - AI 万能视频下载总结器">
         <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center shadow-sm" role="img" aria-label="站点 Logo">
           <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -10,7 +10,7 @@
               d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         </div>
-        <span class="text-lg font-semibold text-text-primary tracking-tight">视频下载总结器</span>
+        <span class="text-lg font-semibold text-text-primary tracking-tight">ClipBrief</span>
         <span class="hidden sm:inline text-xs text-text-muted bg-primary-light px-2 py-0.5 rounded-full">下载 + AI 总结</span>
       </a>
       <nav class="hidden md:flex items-center gap-6 text-sm text-text-secondary" aria-label="主导航">

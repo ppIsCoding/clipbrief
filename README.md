@@ -1,38 +1,32 @@
-# 项目代码
+# ClipBrief
 
-自己写的代码放这里，**不要直接改 `04-参考代码/free-video-downloader`**。
+> AI 万能视频下载总结器 —— 一个链接搞定视频下载 + AI 总结。
 
-## 目录
+粘贴视频链接，解析标题、封面和清晰度，服务端下载视频；同时提取字幕，调用 DeepSeek 生成摘要、思维导图，并支持基于字幕的问答。
 
-```
-05-项目代码/
-├─ backend/             FastAPI 后端
-│  ├─ main.py           入口、解析/下载/缩略图代理、路由挂载
-│  ├─ downloader.py     yt-dlp 封装
-│  ├─ douyin.py         抖音专用解析
-│  ├─ summarizer.py     字幕提取 + DeepSeek + SSE
-│  ├─ api_summarize.py  总结/问答接口
-│  ├─ database.py       SQLite 用户表与每日配额
-│  ├─ auth.py           bcrypt + JWT
-│  ├─ api_auth.py       注册/登录/me
-│  ├─ requirements.txt
-│  └─ .env.example
-├─ frontend/            Vue 3 + Vite + Tailwind
-│  ├─ src/App.vue       页面入口
-│  ├─ src/components/   组件（见 docs/组件树.md）
-│  ├─ src/api/          接口封装（video / summarize / auth）
-│  ├─ index.html        TDK、结构化数据、FAQ（SEO/GEO）
-│  └─ public/           robots.txt、sitemap.xml、favicon
-├─ mock/server.py       无依赖 Mock 服务，前端不等后端
-├─ scripts/commit.ps1   按作者提交（三人共用目录时用）
-└─ docs/
-   ├─ api.md            接口契约（唯一来源）
-   ├─ 组件树.md
-   ├─ git-协作与作者约定.md
-   └─ notes/            每人一页模块笔记
-```
+## 功能
 
-## 启动
+- 多平台解析下载：B站、YouTube、抖音等，基于 yt-dlp
+- 抖音专用解析：短链还原，无水印直链
+- 缩略图代理：解决 Referer 防盗链
+- AI 总结：SSE 流式摘要，Markdown 排版
+- 思维导图：markmap 渲染，支持全屏与导出
+- AI 问答：基于视频字幕回答
+- 字幕下载：SRT / VTT / TXT
+- 用户体系：邮箱注册登录（bcrypt + JWT），免费用户每日 3 次 AI 总结
+- SEO / GEO：TDK、结构化数据、robots.txt、sitemap.xml、FAQ 内容
+
+## 技术栈
+
+| 层 | 技术 |
+| --- | --- |
+| 前端 | Vue 3 + Vite + Tailwind CSS |
+| 后端 | FastAPI + yt-dlp |
+| AI | DeepSeek（OpenAI 兼容接口） |
+| 存储 | SQLite |
+| 流式 | SSE |
+
+## 快速开始
 
 后端：
 
@@ -53,28 +47,40 @@ npm install
 npm run dev
 ```
 
-只想联调界面、没有 DeepSeek Key 时，用 Mock 顶替后端：
+访问 http://localhost:5173。
+
+没有 DeepSeek Key、只想联调界面时，用 Mock 顶替后端（同样占 8000 端口）：
 
 ```powershell
-python ..\mock\server.py
+python .\mock\server.py
 ```
 
-## 约定
+## 目录
 
-- 接口先写进 `docs/api.md`，改接口先改文档。
-- 分支：`feat/download`、`feat/summary`、`feat/frontend`、`feat/auth`、`feat/seo`。
-- 每完成一条链路打 tag，和参考仓库的 `stage-0X` 对应。
-- 提交信息 `feat(模块): 中文描述`；作者规则见 `docs/git-协作与作者约定.md`。
-- `.env`、`node_modules/`、`.venv/`、`backend/data/`、`backend/downloads/` 不提交。
-- 代码自己写，参考仓库只作对照；每个模块配一页笔记放在 `docs/notes/`。
+```
+backend/     FastAPI 服务：解析、下载、总结、用户
+frontend/    Vue 3 前端
+mock/        无依赖 Mock 服务
+docs/        接口契约、组件树、测试用例、Git 约定
+scripts/     提交脚本
+```
 
-## 当前进度（11/12）
+## 文档
 
-- [x] 接口契约 `docs/api.md`
-- [x] 后端骨架 + 解析/下载/总结/用户接口（已裁剪支付）
-- [x] 前端骨架 + 组件（已裁剪定价/支付）
-- [x] Mock 服务
-- [x] Git 初始化与作者约定
-- [ ] `backend/.env` 填 `DEEPSEEK_API_KEY`
-- [ ] 安装 ffmpeg
-- [ ] 前端 `npm install` 并跑通
+- 接口契约：[`docs/api.md`](docs/api.md)
+- 组件树：[`docs/组件树.md`](docs/组件树.md)
+- 测试用例模板：[`docs/测试用例模板.md`](docs/测试用例模板.md)
+- Git 协作与作者约定：[`docs/git-协作与作者约定.md`](docs/git-协作与作者约定.md)
+- 开发记录：[`docs/11-12-完成记录.md`](docs/11-12-完成记录.md)
+
+## 团队
+
+| 成员 | 负责 |
+| --- | --- |
+| 陈博涵 | 下载链路、AI 总结后端、导图导出与字幕下载组件 |
+| 潘少杰 | 接口契约、抖音适配、用户与配额、测试统筹 |
+| 徐子昂 | 前端页面、布局、SEO/GEO、演示 |
+
+## 声明
+
+本项目仅用于课程学习与技术研究，请下载自己拥有版权或已获授权的内容，遵守各平台服务条款。
