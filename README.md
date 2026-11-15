@@ -79,6 +79,9 @@ docs/        接口契约、组件树、测试用例、Git 约定
 - 接口契约：[`docs/api.md`](docs/api.md)
 - 组件树：[`docs/组件树.md`](docs/组件树.md)
 - 测试用例模板：[`docs/测试用例模板.md`](docs/测试用例模板.md)
+- 验收清单：[`docs/验收清单.md`](docs/验收清单.md)
+- 优化基线：[`docs/优化基线.md`](docs/优化基线.md)
+- 演示截图：[`docs/截图/`](docs/截图/)
 - Git 协作与作者约定：[`docs/git-协作与作者约定.md`](docs/git-协作与作者约定.md)
 - 开发记录：[`docs/11-12-完成记录.md`](docs/11-12-完成记录.md)
 
