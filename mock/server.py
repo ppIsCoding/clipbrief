@@ -285,8 +285,12 @@ class Handler(BaseHTTPRequestHandler):
         return self._text(SAMPLE_SUBTITLE, filename="subtitle.txt")
 
     def _summarize(self):
-        self._body()
+        body = self._body()
+        url = body.get("url") or ""
         self._sse_start()
+        if "fail" in url:
+            self._sse("error", {"message": "模拟：该视频没有可用字幕"})
+            return
         self._sse(
             "subtitle",
             {
