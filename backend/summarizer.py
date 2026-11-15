@@ -4,6 +4,7 @@ import json
 import os
 import re
 import tempfile
+import uuid
 from typing import Optional
 
 import httpx
@@ -281,14 +282,33 @@ class VideoSummarizer:
     """使用 DeepSeek API 生成视频总结、思维导图、问答"""
 
     def __init__(self):
-        api_key = os.getenv("DEEPSEEK_API_KEY", "")
+        api_key = os.getenv("LLM_API_KEY") or os.getenv("DEEPSEEK_API_KEY", "")
         if not api_key:
-            raise ValueError("DEEPSEEK_API_KEY 环境变量未设置")
+            raise ValueError("LLM_API_KEY（或 DEEPSEEK_API_KEY）环境变量未设置")
+
+        base_url = (
+            os.getenv("LLM_BASE_URL")
+            or os.getenv("DEEPSEEK_BASE_URL")
+            or "https://api.deepseek.com"
+        )
+        self.model = (
+            os.getenv("LLM_MODEL")
+            or os.getenv("DEEPSEEK_MODEL")
+            or "deepseek-chat"
+        )
+
+        default_headers = {}
+        if "opencode.ai" in base_url:
+            default_headers = {
+                "User-Agent": "clipbrief/1.0",
+                "x-opencode-session": os.getenv("LLM_SESSION_ID") or uuid.uuid4().hex,
+            }
+
         self.client = OpenAI(
             api_key=api_key,
-            base_url="https://api.deepseek.com",
+            base_url=base_url,
+            default_headers=default_headers or None,
         )
-        self.model = "deepseek-chat"
 
     def summarize_stream(self, subtitle_text: str, language: str = "zh"):
         """流式生成视频总结，yield 每个 token"""

@@ -22,7 +22,7 @@
 | --- | --- |
 | 前端 | Vue 3 + Vite + Tailwind CSS |
 | 后端 | FastAPI + yt-dlp |
-| AI | DeepSeek（OpenAI 兼容接口） |
+| AI | DeepSeek / OpenCode Go（OpenAI 兼容接口） |
 | 存储 | SQLite |
 | 流式 | SSE |
 
@@ -35,9 +35,17 @@ cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-copy .env.example .env    # 填 DEEPSEEK_API_KEY
+copy .env.example .env    # 填 LLM_API_KEY
 python main.py
 ```
+
+> 大模型走标准 OpenAI 兼容接口，三个变量：`LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL`。
+> 默认是 DeepSeek 官方（`https://api.deepseek.com` + `deepseek-chat`）；用 OpenCode Go 时：
+>
+> ```
+> LLM_BASE_URL=https://opencode.ai/inference/go/openai/v1
+> LLM_MODEL=deepseek-v4.1-flash
+> ```
 
 前端：
 
