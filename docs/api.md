@@ -39,7 +39,10 @@
 | --- | --- | --- | --- |
 | GET | `/health` | 健康检查 | 否 |
 | POST | `/parse` | 解析视频信息与可用格式 | 否 |
-| POST | `/download` | 服务端下载并返回文件 | 否 |
+| POST | `/download/start` | 创建下载任务，返回 `task_id` | 否 |
+| GET | `/download/progress/{task_id}` | 下载进度（SSE） | 否 |
+| GET | `/download/file/{task_id}` | 取已完成的下载文件 | 否 |
+| POST | `/download` | 同步下载并返回文件（兼容保留） | 否 |
 | POST | `/direct-url` | 获取带鉴权的直链 | 否 |
 | GET | `/proxy/thumbnail` | 缩略图代理（绕过防盗链） | 否 |
 | POST | `/summarize` | AI 总结（SSE） | **是** |
@@ -110,20 +113,60 @@
 
 - `platform` 取 yt-dlp 的 extractor 名（B站是 `BiliBili`），抖音是 `douyin`。
 - `formats` 已过滤纯音频，按清晰度从高到低，最多 15 条；没有带音频的格式时，会自动插入一条 `bestvideo+bestaudio/best` 合并项。
+- 同清晰度优先保留 H.264（Windows 自带播放器可直接打开），`label` 里带编码名；合并项的大小按视频流 + 音频流估算。
 - `thumbnail` 是源站地址，前端展示时拼 `/api/proxy/thumbnail?url=...`。
 - `subtitles` / `automatic_captions` 只返回语言列表，不返回内容。
 
-### POST /download
+### POST /download/start
 
 ```json
-{ "url": "https://...", "format_id": "bestvideo+bestaudio/best" }
+{
+  "url": "https://...",
+  "format_id": "bestvideo+bestaudio/best",
+  "expected_size": 75219776
+}
 ```
 
-响应：二进制文件流
+`expected_size` 可选，来自解析结果的 `filesize`，只作为进度的兜底分母；后端会预解析实际流并校正。
+
+响应：
+
+```json
+{ "success": true, "data": { "task_id": "9f2c..." } }
+```
+
+### GET /download/progress/{task_id}
+
+`Content-Type: text/event-stream`，使用默认 `message` 事件，每条 `data` 是一个 JSON：
+
+```
+data: {"status":"pending","percent":null,"downloaded":0,"total":null,"speed":null,"eta":null}
+
+data: {"status":"downloading","percent":42.1,"downloaded":31660000,"total":75219776,"speed":2100000,"eta":14}
+
+data: {"status":"processing","percent":99.0,"downloaded":75167359,"total":75219776,"speed":null,"eta":null}
+
+data: {"status":"done","percent":100.0,"downloaded":75234063,"total":75219776,"filename":"视频标题.mp4"}
+
+data: {"status":"error","error":"当前网络无法访问该平台，请检查网络后重试"}
+```
+
+- `status=processing` 表示音视频正在合并。
+- `status=done` / `error` 后服务端关闭连接。
+- 任务 15 分钟未取文件会过期。
+
+### GET /download/file/{task_id}
+
+- 仅在任务 `done` 后可取，否则返回 400。
+- 返回文件流，响应结束后删除临时文件和任务；重复请求返回 404。
+
+### POST /download（兼容保留）
+
+同步下载并直接返回文件流，旧客户端使用；前端已改为「创建任务 + SSE + 取文件」。
 
 ```
 Content-Type: application/octet-stream
-Content-Disposition: attachment; filename="视频标题.mp4"
+Content-Disposition: attachment; filename*=utf-8''...
 ```
 
 ### POST /direct-url
