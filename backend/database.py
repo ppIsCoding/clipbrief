@@ -1,10 +1,26 @@
 import os
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "data", "app.db")
 FREE_DAILY_SUMMARY_LIMIT = int(os.getenv("FREE_DAILY_LIMIT", "3"))
+QUOTA_TIMEZONE = os.getenv("QUOTA_TIMEZONE", "Asia/Shanghai")
+try:
+    QUOTA_TZ = ZoneInfo(QUOTA_TIMEZONE)
+except Exception:
+    # Windows 不一定带 IANA 时区库；中国没有夏令时，用固定 +08:00 兜底
+    QUOTA_TZ = (
+        timezone(timedelta(hours=8)) if QUOTA_TIMEZONE == "Asia/Shanghai" else None
+    )
+
+
+def quota_today() -> str:
+    """配额按用户所在时区跨天，默认北京时间零点重置。"""
+    if QUOTA_TZ is None:
+        return datetime.now().astimezone().strftime("%Y-%m-%d")
+    return datetime.now(QUOTA_TZ).strftime("%Y-%m-%d")
 
 
 def get_db_path():
@@ -70,7 +86,7 @@ def create_user(email: str, password_hash: str) -> dict:
 
 def check_summary_quota(user_id: int) -> tuple[bool, int]:
     """Return (allowed, remaining) without consuming a quota."""
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = quota_today()
     with get_db() as conn:
         user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         if not user:
@@ -83,7 +99,7 @@ def check_summary_quota(user_id: int) -> tuple[bool, int]:
 
 def increment_summary(user_id: int) -> int:
     """Consume one quota after a successful summary. Returns remaining count."""
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = quota_today()
     with get_db() as conn:
         user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         if not user:

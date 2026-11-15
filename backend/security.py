@@ -74,12 +74,18 @@ def normalize_video_url(url: str) -> str:
 
     - B站 `/id/video/BV...` -> `/video/BV...`（否则会走 generic 解析，拿不到格式）
     - 去掉 vd_source / spm_id_from 等跟踪参数，只保留分 P 的 p
+    - 非 B站链接原样返回，不动 query（如 YouTube 的 v=）
     """
     parsed = urlparse(url)
     host = (parsed.hostname or "").lower()
-    path = parsed.path
 
-    if host.endswith("bilibili.com") and path.startswith("/id/"):
+    # 只处理 B站。其他平台的 query 往往承载视频 ID（如 YouTube 的 v=），
+    # 统一裁剪会直接导致解析失败。
+    if not host.endswith("bilibili.com"):
+        return url
+
+    path = parsed.path
+    if path.startswith("/id/"):
         path = path[len("/id"):]
 
     query = parse_qs(parsed.query)
