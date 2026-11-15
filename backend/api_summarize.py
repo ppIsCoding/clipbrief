@@ -6,6 +6,7 @@ from collections.abc import AsyncIterable
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.sse import EventSourceResponse, ServerSentEvent
+from openai import APIConnectionError, APITimeoutError, AuthenticationError, RateLimitError
 from pydantic import BaseModel
 
 from auth import get_optional_user
@@ -44,9 +45,22 @@ def _get_summarizer():
     if not hasattr(_get_summarizer, "_instance"):
         try:
             _get_summarizer._instance = VideoSummarizer()
-        except ValueError as e:
-            raise HTTPException(status_code=500, detail=str(e))
+        except ValueError:
+            raise HTTPException(
+                status_code=503, detail="AI 总结服务未配置（缺少 API Key）"
+            )
     return _get_summarizer._instance
+
+
+def _friendly_ai_error(exc: Exception, action: str = "总结") -> str:
+    """把模型 SDK 异常转成用户能看懂的提示"""
+    if isinstance(exc, AuthenticationError):
+        return "AI 服务鉴权失败，请检查 API Key 配置"
+    if isinstance(exc, RateLimitError):
+        return "AI 服务额度不足或请求过于频繁，请稍后重试"
+    if isinstance(exc, (APIConnectionError, APITimeoutError)):
+        return "AI 服务连接超时，请稍后重试"
+    return f"{action}失败: {str(exc)[:200]}"
 
 
 def _get_extractor():
@@ -121,9 +135,16 @@ async def summarize_video(req: SummarizeRequest, user: dict | None = Depends(get
 
         yield ServerSentEvent(raw_data="[DONE]", event="done")
 
+    except HTTPException as e:
+        yield ServerSentEvent(
+            raw_data=json.dumps({"message": str(e.detail)}, ensure_ascii=False),
+            event="error",
+        )
     except Exception as e:
         yield ServerSentEvent(
-            raw_data=json.dumps({"message": f"总结失败: {str(e)}"}, ensure_ascii=False),
+            raw_data=json.dumps(
+                {"message": _friendly_ai_error(e, "总结")}, ensure_ascii=False
+            ),
             event="error",
         )
 
@@ -163,8 +184,15 @@ async def chat_with_video(req: ChatRequest, user: dict | None = Depends(get_opti
 
         yield ServerSentEvent(raw_data="[DONE]", event="done")
 
+    except HTTPException as e:
+        yield ServerSentEvent(
+            raw_data=json.dumps({"message": str(e.detail)}, ensure_ascii=False),
+            event="error",
+        )
     except Exception as e:
         yield ServerSentEvent(
-            raw_data=json.dumps({"message": f"回答失败: {str(e)}"}, ensure_ascii=False),
+            raw_data=json.dumps(
+                {"message": _friendly_ai_error(e, "回答")}, ensure_ascii=False
+            ),
             event="error",
         )

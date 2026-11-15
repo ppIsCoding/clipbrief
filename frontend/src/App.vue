@@ -90,7 +90,7 @@ import ComparisonSection from './components/ComparisonSection.vue'
 import PlatformSection from './components/PlatformSection.vue'
 import AppFooter from './components/AppFooter.vue'
 import AuthModal from './components/AuthModal.vue'
-import { parseVideo, startDownload, getDownloadProgressUrl, downloadTaskFile } from './api/video.js'
+import { parseVideo, startDownload, getDownloadProgressUrl, getDownloadFileUrl } from './api/video.js'
 import { getSavedUser, fetchMe, logout as logoutApi, isLoggedIn } from './api/auth.js'
 
 const demoMode = ref(false)
@@ -237,20 +237,12 @@ async function handleDownload(formatId) {
       }
     })
 
-    const response = await downloadTaskFile(task.task_id)
-    const contentDisposition = response.headers['content-disposition']
-    let filename = 'video.mp4'
-    if (contentDisposition) {
-      const match = contentDisposition.match(/filename\*?=(?:UTF-8'')?([^;\n]+)/i)
-      if (match) filename = decodeURIComponent(match[1].replace(/"/g, ''))
-    }
-    const blob = new Blob([response.data])
-    const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url
-    a.download = filename
+    a.href = getDownloadFileUrl(task.task_id)
+    a.rel = 'noopener'
+    document.body.appendChild(a)
     a.click()
-    setTimeout(() => window.URL.revokeObjectURL(url), 1000)
+    document.body.removeChild(a)
   } catch (err) {
     const detail = err.response?.data?.detail
     const msg = detail?.error || detail || err.message

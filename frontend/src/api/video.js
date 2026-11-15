@@ -39,10 +39,6 @@ export function getDownloadProgressUrl(taskId) {
   return `/api/download/progress/${taskId}`
 }
 
-export async function downloadTaskFile(taskId) {
-  const response = await api.get(`/download/file/${taskId}`, {
-    responseType: 'blob',
-    timeout: 600000,
-  })
-  return response
+export function getDownloadFileUrl(taskId) {
+  return `/api/download/file/${taskId}`
 }
