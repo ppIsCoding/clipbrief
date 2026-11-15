@@ -276,19 +276,22 @@ Content-Disposition: attachment; filename*=utf-8''...
 
 配额规则：
 
-- 免费用户每日 3 次（`FREE_DAILY_LIMIT` 可配），跨天按 UTC 日期重置
+- 免费用户每日 3 次（`FREE_DAILY_LIMIT` 可配），按北京时间零点重置
+- 时区可用 `QUOTA_TIMEZONE` 覆盖；Windows 没装 tzdata 时自动用固定 +08:00
 - **总结成功才扣**；无字幕、模型失败、中途断开都不扣
 - 剩余次数通过 `summarize` 的 `quota` 事件返回
+- 邮箱注册/登录统一 `strip().lower()`，大小写不会产生两个账号
 
 ## 6. 前端约定
 
 - 所有请求走 `/api`，开发环境由 Vite 代理到 `localhost:8000`
 - 业务接口判断 `success`，错误读 `detail`（可能是字符串或对象）
 - SSE 用 `fetch` + `ReadableStream` 解析，不用 `EventSource`（需要 POST 和 Authorization 头）
-- 下载用 axios `responseType: 'blob'`，再创建 `<a download>` 触发保存
+- 下载走服务端直链 `/api/download/file/{task_id}`，由浏览器原生下载保存
 
 ## 7. 冻结记录
 
 | 日期 | 变更 | 负责人 |
 | --- | --- | --- |
 | 2026-11-12 | v1：10 个接口、SSE 事件、错误结构、配额规则 | 潘少杰 |
+| 2026-11-22 | 非 B站链接保留原 query；配额改北京时间；邮箱统一小写；补 17 个单元测试 | 潘少杰 |

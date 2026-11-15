@@ -65,6 +65,17 @@ npm run dev
 python .\mock\server.py
 ```
 
+## 测试
+
+后端单元测试只用标准库 `unittest`，不需要额外依赖：
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+覆盖 URL 归一化、分享文案提取、SSRF 拒绝、配额扣减、邮箱归一化，共 17 个用例。
+
 ## 目录
 
 ```
