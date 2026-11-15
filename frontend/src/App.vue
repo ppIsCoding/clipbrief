@@ -13,6 +13,26 @@
         :compact="!!videoData"
         :showSlogan="!videoData || demoMode"
       />
+      <!-- 解析/下载错误提示 -->
+      <div v-if="errorMessage" class="max-w-3xl mx-auto px-4 sm:px-6 mb-4">
+        <div class="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <span class="flex-1 leading-relaxed">{{ errorMessage }}</span>
+          <button
+            v-if="retryAction"
+            @click="retryAction()"
+            class="flex-shrink-0 font-medium underline underline-offset-2 hover:text-red-900 cursor-pointer"
+          >
+            重试
+          </button>
+          <button
+            @click="clearError"
+            class="flex-shrink-0 text-red-400 hover:text-red-700 cursor-pointer"
+            aria-label="关闭错误提示"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
       <!-- 视频信息 + AI 总结：左右双栏同屏布局 -->
       <section v-if="videoData" class="py-4 sm:py-6 bg-white">
         <div class="max-w-7xl mx-auto px-4 sm:px-6">
@@ -132,6 +152,18 @@ const videoData = ref(null)
 const currentUrl = ref('')
 const summaryKey = ref(0)
 const summarizing = ref(false)
+const errorMessage = ref('')
+const retryAction = ref(null)
+
+function showError(message, retry = null) {
+  errorMessage.value = message
+  retryAction.value = retry
+}
+
+function clearError() {
+  errorMessage.value = ''
+  retryAction.value = null
+}
 
 function handleSummarize() {
   summaryKey.value++
@@ -143,6 +175,7 @@ function handleSummarizeLoadingChange(isLoading) {
 
 async function handleParse(url) {
   loading.value = true
+  clearError()
   videoData.value = null
   currentUrl.value = url
   try {
@@ -151,11 +184,11 @@ async function handleParse(url) {
       videoData.value = res.data
       summaryKey.value++
     } else {
-      alert('解析失败：' + (res.error || '未知错误'))
+      showError(res.error || '解析失败，请稍后重试', () => handleParse(url))
     }
   } catch (err) {
     const msg = err.response?.data?.detail?.error || err.response?.data?.detail || err.message
-    alert('解析失败：' + msg)
+    showError(msg || '解析失败，请稍后重试', () => handleParse(url))
   } finally {
     loading.value = false
   }
@@ -163,6 +196,7 @@ async function handleParse(url) {
 
 async function handleDownload(formatId) {
   downloading.value = true
+  clearError()
   try {
     const response = await downloadViaServer(currentUrl.value, formatId)
     const contentDisposition = response.headers['content-disposition']
@@ -177,9 +211,11 @@ async function handleDownload(formatId) {
     a.href = url
     a.download = filename
     a.click()
-    window.URL.revokeObjectURL(url)
+    setTimeout(() => window.URL.revokeObjectURL(url), 1000)
   } catch (err) {
-    alert('下载失败：' + (err.message || '请稍后重试'))
+    const detail = err.response?.data?.detail
+    const msg = detail?.error || detail || err.message
+    showError(msg || '下载失败，请稍后重试', () => handleDownload(formatId))
   } finally {
     downloading.value = false
   }

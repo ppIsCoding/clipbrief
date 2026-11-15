@@ -57,6 +57,30 @@ app.add_middleware(
 )
 
 
+def friendly_error(prefix: str, exc: Exception) -> str:
+    """把 yt-dlp 的英文异常转成用户能看懂的中文提示"""
+    text = str(exc)
+    lowered = text.lower()
+    if "unsupported url" in lowered or "is not a valid url" in lowered:
+        return "不支持的平台或链接，请换一个视频地址"
+    if "unable to download webpage" in lowered or "http error 404" in lowered:
+        return "无法访问该链接，请确认地址有效或换一个平台"
+    if "http error 403" in lowered:
+        return "该平台拒绝了请求，请稍后重试或配置 cookies"
+    if (
+        "unable to download api page" in lowered
+        or "connection" in lowered
+        or "timed out" in lowered
+        or "timeout" in lowered
+    ):
+        return "当前网络无法访问该平台，请检查网络后重试"
+    if "private video" in lowered or "login required" in lowered or "sign in" in lowered:
+        return "该视频需要登录或没有访问权限"
+    if "requested format is not available" in lowered:
+        return "所选清晰度不可用，请重新解析后再选"
+    return f"{prefix}: {text[:200]}"
+
+
 class ParseRequest(BaseModel):
     url: str
 
@@ -84,7 +108,7 @@ async def parse_video(req: ParseRequest):
     except Exception as exc:
         raise HTTPException(
             status_code=400,
-            detail={"success": False, "error": f"解析失败: {str(exc)}"},
+            detail={"success": False, "error": friendly_error("解析失败", exc)},
         )
 
 
@@ -114,7 +138,7 @@ async def download_video(req: DownloadRequest):
     except Exception as exc:
         raise HTTPException(
             status_code=400,
-            detail={"success": False, "error": f"下载失败: {str(exc)}"},
+            detail={"success": False, "error": friendly_error("下载失败", exc)},
         )
 
 
@@ -130,7 +154,7 @@ async def get_direct_url(req: DownloadRequest):
     except Exception as exc:
         raise HTTPException(
             status_code=400,
-            detail={"success": False, "error": f"获取直链失败: {str(exc)}"},
+            detail={"success": False, "error": friendly_error("获取直链失败", exc)},
         )
 
 

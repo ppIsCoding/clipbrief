@@ -40,7 +40,7 @@
               v-model="url"
               type="url"
               :placeholder="placeholder"
-              class="w-full h-13 sm:h-14 pl-12 pr-4 rounded-full sm:rounded-r-none border border-border bg-white text-base text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all shadow-sm"
+              class="w-full h-13 sm:h-14 pl-12 pr-14 sm:pr-4 rounded-full sm:rounded-r-none border border-border bg-white text-base text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all shadow-sm"
               :disabled="loading"
               autocomplete="url"
             />
@@ -63,6 +63,7 @@
           <button
             type="submit"
             :disabled="loading || !url.trim()"
+            aria-label="解析视频"
             class="sm:hidden absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center rounded-full bg-primary text-white disabled:opacity-50 cursor-pointer"
           >
             <svg v-if="loading" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
