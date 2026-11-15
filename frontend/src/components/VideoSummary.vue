@@ -44,6 +44,15 @@
 
           <!-- 总结摘要 Tab -->
           <div v-show="activeTab === 'summary'">
+            <div v-if="summaryError" class="flex flex-col items-center justify-center py-12 text-center">
+              <p class="text-sm text-red-600 mb-4 leading-relaxed">{{ summaryError }}</p>
+              <button
+                @click="startSummarize"
+                class="px-5 py-2.5 rounded-full text-sm font-medium text-white bg-primary hover:bg-blue-600 transition-colors cursor-pointer"
+              >
+                重新总结
+              </button>
+            </div>
             <div
               v-if="summaryText"
               class="prose prose-slate prose-sm max-w-none summary-prose"
@@ -306,6 +315,7 @@ const activeTab = ref('summary')
 const loading = ref(false)
 const loadingMessage = ref('正在提取视频字幕...')
 const loginRequired = ref(false)
+const summaryError = ref('')
 
 const summaryText = ref('')
 const subtitleData = ref({ segments: [], has_subtitle: false })
@@ -314,6 +324,7 @@ const mindmapMarkdown = ref('')
 const mindmapSvg = ref(null)
 const mindmapContainer = ref(null)
 let markmapInstance = null
+let mindmapRenderedFor = ''
 
 const chatMessages = ref([])
 const chatInput = ref('')
@@ -362,6 +373,22 @@ watch(mindmapMarkdown, async (val) => {
   }
 })
 
+// 思维导图 Tab 默认是 v-show 隐藏的，隐藏时尺寸为 0，
+// 直接渲染会让 markmap 算出 NaN 坐标；切到该 Tab 时再渲染或重新适配。
+watch(activeTab, async (tab) => {
+  if (tab !== 'mindmap' || !mindmapMarkdown.value) return
+  await nextTick()
+  if (mindmapRenderedFor !== mindmapMarkdown.value || !markmapInstance) {
+    renderMindmap(mindmapMarkdown.value)
+  } else {
+    try {
+      markmapInstance.fit()
+    } catch {
+      renderMindmap(mindmapMarkdown.value)
+    }
+  }
+})
+
 function renderMarkdown(text) {
   if (!text) return ''
   return marked.parse(text)
@@ -369,11 +396,24 @@ function renderMarkdown(text) {
 
 function renderMindmap(md) {
   if (!mindmapSvg.value) return
+  const rect = mindmapSvg.value.getBoundingClientRect()
+  if (rect.width === 0 || rect.height === 0) {
+    // 容器还没显示，等切到导图 Tab 再画
+    return
+  }
   try {
+    if (markmapInstance?.destroy) {
+      try {
+        markmapInstance.destroy()
+      } catch {
+        // 旧实例已失效时忽略
+      }
+    }
     mindmapSvg.value.innerHTML = ''
     const transformer = new Transformer()
     const { root } = transformer.transform(md)
     markmapInstance = Markmap.create(mindmapSvg.value, { autoFit: true }, root)
+    mindmapRenderedFor = md
   } catch (e) {
     console.warn('思维导图渲染失败:', e)
   }
@@ -652,7 +692,7 @@ function triggerDownload(blob, filename) {
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 function handleClickOutside(e) {
@@ -662,10 +702,18 @@ function handleClickOutside(e) {
 }
 
 const quotaInfo = ref(null)
+let summarizeController = null
 
 async function startSummarize() {
+  if (summarizeController) {
+    summarizeController.abort()
+  }
+  summarizeController = new AbortController()
+  const controller = summarizeController
+
   loading.value = true
   loginRequired.value = false
+  summaryError.value = ''
   summaryText.value = ''
   mindmapMarkdown.value = ''
   quotaInfo.value = null
@@ -705,15 +753,29 @@ async function startSummarize() {
             loading.value = false
             return
           }
-          alert(parsed.message || '总结失败')
+          summaryError.value = parsed.message || '总结失败，请稍后重试'
         } catch (e) {
-          alert('总结失败: ' + data)
+          summaryError.value = data || '总结失败，请稍后重试'
         }
       },
-    })
+    }, controller.signal)
+
+    if (controller.signal.aborted) return
+    if (loading.value) {
+      loading.value = false
+      if (!summaryText.value && !summaryError.value) {
+        summaryError.value = '总结连接中断，请重试'
+      }
+    }
   } catch (err) {
+    if (err.name === 'AbortError') return
+    if (controller !== summarizeController) return
     loading.value = false
-    alert('总结请求失败: ' + err.message)
+    summaryError.value = `总结请求失败：${err.message || '网络异常'}`
+  } finally {
+    if (summarizeController === controller) {
+      summarizeController = null
+    }
   }
 }
 
@@ -783,6 +845,17 @@ onBeforeUnmount(() => {
   document.removeEventListener('fullscreenchange', onFullscreenChange)
   document.removeEventListener('webkitfullscreenchange', onFullscreenChange)
   document.removeEventListener('click', handleClickOutside)
+  if (summarizeController) {
+    summarizeController.abort()
+    summarizeController = null
+  }
+  if (markmapInstance?.destroy) {
+    try {
+      markmapInstance.destroy()
+    } catch {
+      // 忽略已销毁实例
+    }
+  }
 })
 </script>
 

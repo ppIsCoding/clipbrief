@@ -64,11 +64,12 @@ function authHeaders() {
   return headers
 }
 
-export async function summarizeVideo(url, language = 'zh', callbacks = {}) {
+export async function summarizeVideo(url, language = 'zh', callbacks = {}, signal) {
   const response = await fetch('/api/summarize', {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify({ url, language }),
+    signal,
   })
 
   if (!response.ok) {
