@@ -50,7 +50,7 @@
     </div>
 
     <!-- 格式选择 -->
-    <div class="border-t border-border-light px-5 sm:px-6 py-5">
+    <div class="border-t border-border-light px-5 sm:px-6 py-5" data-testid="download-panel">
       <h4 class="text-sm font-medium text-text-primary mb-3 flex items-center gap-2">
         <svg class="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
