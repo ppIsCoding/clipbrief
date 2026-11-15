@@ -57,6 +57,8 @@ npm run dev
 
 访问 http://localhost:5173。
 
+> SEO 里的 `clipbrief.example.com` 是占位域名，正式上线时替换 canonical、og:url、sitemap、robots 和 llms.txt 中的域名。
+
 没有 DeepSeek Key、只想联调界面时，用 Mock 顶替后端（同样占 8000 端口）：
 
 ```powershell
