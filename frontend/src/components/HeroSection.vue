@@ -28,7 +28,7 @@
 
       <!-- 搜索输入框 -->
       <div class="max-w-2xl mx-auto">
-        <form @submit.prevent="onSubmit" class="relative flex items-center" role="search" aria-label="视频链接解析">
+        <form @submit.prevent="onSubmit" class="relative flex items-center" role="search" aria-label="视频链接解析" novalidate>
           <div class="relative flex-1">
             <label for="video-url-input" class="sr-only">粘贴视频链接进行解析下载</label>
             <svg class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -111,6 +111,16 @@ const examples = [
   { label: 'Twitter/X', url: 'https://x.com/elonmusk/status/1234567890' },
 ]
 
+const SHARE_URL_RE = /https?:\/\/[^\s<>"'，。！？、；：）】》]+/i
+
+function extractShareUrl(raw) {
+  const text = raw.trim()
+  if (/^https?:\/\//i.test(text)) return text
+  const match = text.match(SHARE_URL_RE)
+  if (!match) return text
+  return match[0].replace(/[.,;:!?)\]}]+$/, '')
+}
+
 function normalizeUrl(raw) {
   let u = raw
   if (u.includes('bilibili.com') && !u.includes('www.bilibili.com')) {
@@ -121,8 +131,9 @@ function normalizeUrl(raw) {
 
 function onSubmit() {
   const trimmed = url.value.trim()
-  if (trimmed) {
-    emit('parse', normalizeUrl(trimmed))
-  }
+  if (!trimmed) return
+  const extracted = extractShareUrl(trimmed)
+  url.value = extracted
+  emit('parse', normalizeUrl(extracted))
 }
 </script>

@@ -21,7 +21,12 @@ from starlette.background import BackgroundTask
 from database import init_db
 from douyin import DouyinParser, is_douyin_url
 from downloader import VideoDownloader
-from security import UnsafeURLError, validate_public_url
+from security import (
+    UnsafeURLError,
+    extract_share_url,
+    normalize_video_url,
+    validate_public_url,
+)
 
 downloader = VideoDownloader()
 douyin_parser = DouyinParser(download_dir=downloader.DOWNLOAD_DIR)
@@ -102,6 +107,19 @@ def _check_url(url: str) -> None:
         )
 
 
+def _prepare_url(raw: str) -> str:
+    """从分享文案提取链接、校验公网地址并做平台归一化"""
+    try:
+        url = extract_share_url(raw)
+        validate_public_url(url)
+    except UnsafeURLError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"success": False, "error": str(exc)},
+        )
+    return normalize_video_url(url)
+
+
 class ParseRequest(BaseModel):
     url: str
 
@@ -120,13 +138,13 @@ async def health_check():
 @app.post("/api/parse")
 async def parse_video(req: ParseRequest):
     """解析视频信息（抖音走专用模块，其他走 yt-dlp）"""
-    _check_url(req.url)
+    url = _prepare_url(req.url)
     try:
         loop = asyncio.get_event_loop()
-        if is_douyin_url(req.url):
-            result = await loop.run_in_executor(None, douyin_parser.parse, req.url)
+        if is_douyin_url(url):
+            result = await loop.run_in_executor(None, douyin_parser.parse, url)
         else:
-            result = await loop.run_in_executor(None, downloader.parse_video, req.url)
+            result = await loop.run_in_executor(None, downloader.parse_video, url)
         return {"success": True, "data": result}
     except Exception as exc:
         raise HTTPException(
@@ -138,14 +156,14 @@ async def parse_video(req: ParseRequest):
 @app.post("/api/download")
 async def download_video(req: DownloadRequest):
     """服务端下载视频后返回文件（抖音走专用模块）"""
-    _check_url(req.url)
+    url = _prepare_url(req.url)
     try:
         loop = asyncio.get_event_loop()
-        if is_douyin_url(req.url):
-            result = await loop.run_in_executor(None, douyin_parser.download, req.url)
+        if is_douyin_url(url):
+            result = await loop.run_in_executor(None, douyin_parser.download, url)
         else:
             result = await loop.run_in_executor(
-                None, downloader.download_video, req.url, req.format_id
+                None, downloader.download_video, url, req.format_id
             )
         filepath = result["filepath"]
         if not os.path.exists(filepath):
@@ -250,7 +268,7 @@ async def _run_download_task(
 @app.post("/api/download/start")
 async def start_download(req: DownloadRequest):
     """创建下载任务，立即返回 task_id；进度通过 SSE 推送"""
-    _check_url(req.url)
+    url = _prepare_url(req.url)
     _cleanup_tasks()
     task_id = uuid.uuid4().hex
     with TASKS_LOCK:
@@ -268,7 +286,7 @@ async def start_download(req: DownloadRequest):
             "created": time.time(),
         }
     background_task = asyncio.create_task(
-        _run_download_task(task_id, req.url, req.format_id, req.expected_size)
+        _run_download_task(task_id, url, req.format_id, req.expected_size)
     )
     BACKGROUND_TASKS.add(background_task)
     background_task.add_done_callback(BACKGROUND_TASKS.discard)
@@ -343,11 +361,11 @@ async def download_task_file(task_id: str):
 @app.post("/api/direct-url")
 async def get_direct_url(req: DownloadRequest):
     """获取视频直链"""
-    _check_url(req.url)
+    url = _prepare_url(req.url)
     try:
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
-            None, downloader.get_direct_url, req.url, req.format_id
+            None, downloader.get_direct_url, url, req.format_id
         )
         return {"success": True, "data": result}
     except Exception as exc:

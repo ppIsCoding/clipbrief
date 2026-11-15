@@ -11,7 +11,12 @@ from pydantic import BaseModel
 
 from auth import get_optional_user
 from database import check_summary_quota, increment_summary, FREE_DAILY_SUMMARY_LIMIT
-from security import UnsafeURLError, validate_public_url
+from security import (
+    UnsafeURLError,
+    extract_share_url,
+    normalize_video_url,
+    validate_public_url,
+)
 
 router = APIRouter(prefix="/api", tags=["AI 总结"])
 
@@ -78,7 +83,8 @@ async def summarize_video(req: SummarizeRequest, user: dict | None = Depends(get
     事件类型: subtitle / summary / mindmap / done / error / quota
     """
     try:
-        validate_public_url(req.url)
+        url = extract_share_url(req.url)
+        validate_public_url(url)
     except UnsafeURLError as exc:
         yield ServerSentEvent(
             raw_data=json.dumps({"message": str(exc)}, ensure_ascii=False),
@@ -86,6 +92,7 @@ async def summarize_video(req: SummarizeRequest, user: dict | None = Depends(get
         )
         return
 
+    url = normalize_video_url(url)
     allowed, remaining, message = _check_summary_permission(user)
     if not allowed:
         yield ServerSentEvent(
@@ -98,7 +105,7 @@ async def summarize_video(req: SummarizeRequest, user: dict | None = Depends(get
         loop = asyncio.get_event_loop()
         extractor = _get_extractor()
         subtitle_data = await loop.run_in_executor(
-            None, extractor.extract, req.url
+            None, extractor.extract, url
         )
 
         yield ServerSentEvent(
@@ -153,7 +160,8 @@ async def summarize_video(req: SummarizeRequest, user: dict | None = Depends(get
 async def chat_with_video(req: ChatRequest, user: dict | None = Depends(get_optional_user)) -> AsyncIterable[ServerSentEvent]:
     """AI 视频问答（SSE 流式）"""
     try:
-        validate_public_url(req.url)
+        url = extract_share_url(req.url)
+        validate_public_url(url)
     except UnsafeURLError as exc:
         yield ServerSentEvent(
             raw_data=json.dumps({"message": str(exc)}, ensure_ascii=False),
@@ -161,12 +169,13 @@ async def chat_with_video(req: ChatRequest, user: dict | None = Depends(get_opti
         )
         return
 
+    url = normalize_video_url(url)
     try:
         if not req.subtitle_text.strip():
             loop = asyncio.get_event_loop()
             extractor = _get_extractor()
             subtitle_data = await loop.run_in_executor(
-                None, extractor.extract, req.url
+                None, extractor.extract, url
             )
             if not subtitle_data["has_subtitle"]:
                 yield ServerSentEvent(

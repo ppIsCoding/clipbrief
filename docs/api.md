@@ -112,6 +112,8 @@
 
 说明：
 
+- `url` 可以是纯链接，也可以是平台分享文案（如 `【标题】https://...`），后端会提取第一个 `http(s)` 链接。
+- B站 `/id/video/BV...` 会自动归一化为 `/video/BV...`，只保留分 P 参数 `p`，去掉 `vd_source` 等跟踪参数。
 - `platform` 取 yt-dlp 的 extractor 名（B站是 `BiliBili`），抖音是 `douyin`。
 - `formats` 已过滤纯音频，按清晰度从高到低，最多 15 条；没有带音频的格式时，会自动插入一条 `bestvideo+bestaudio/best` 合并项。
 - 同清晰度优先保留 H.264（Windows 自带播放器可直接打开），`label` 里带编码名；合并项的大小按视频流 + 音频流估算。
