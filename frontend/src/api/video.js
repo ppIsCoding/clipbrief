@@ -27,3 +27,22 @@ export async function downloadViaServer(url, formatId) {
   )
   return response
 }
+
+export async function startDownload(url, formatId, expectedSize) {
+  const payload = { url, format_id: formatId }
+  if (expectedSize) payload.expected_size = expectedSize
+  const { data } = await api.post('/download/start', payload)
+  return data.data
+}
+
+export function getDownloadProgressUrl(taskId) {
+  return `/api/download/progress/${taskId}`
+}
+
+export async function downloadTaskFile(taskId) {
+  const response = await api.get(`/download/file/${taskId}`, {
+    responseType: 'blob',
+    timeout: 600000,
+  })
+  return response
+}

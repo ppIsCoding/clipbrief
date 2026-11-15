@@ -12,22 +12,40 @@ from urllib.parse import parse_qs, urlparse
 
 SAMPLE_FORMATS = [
     {
-        "format_id": "137",
+        "format_id": "bestvideo+bestaudio/best",
         "ext": "mp4",
-        "resolution": "1080p",
-        "filesize": 128974321,
-        "has_video": True,
-        "has_audio": False,
-        "note": "1080P video stream (audio merged by ffmpeg)",
+        "resolution": "1920x1080",
+        "height": 1080,
+        "filesize": 75219776,
+        "filesize_approx": 75219776,
+        "vcodec": "avc1.640032",
+        "acodec": "merged",
+        "has_audio": True,
+        "label": "1080p 最佳 (H.264, 视频+音频合并, 71.7MB)",
     },
     {
-        "format_id": "18",
+        "format_id": "30080",
         "ext": "mp4",
-        "resolution": "360p",
-        "filesize": 18234567,
-        "has_video": True,
-        "has_audio": True,
-        "note": "360P video + audio",
+        "resolution": "1920x1080",
+        "height": 1080,
+        "filesize": 69809437,
+        "filesize_approx": 69809437,
+        "vcodec": "avc1.640032",
+        "acodec": None,
+        "has_audio": False,
+        "label": "1080p MP4 · H.264 (仅视频, 66.6MB)",
+    },
+    {
+        "format_id": "30016",
+        "ext": "mp4",
+        "resolution": "640x360",
+        "height": 360,
+        "filesize": 9298910,
+        "filesize_approx": 9298910,
+        "vcodec": "avc1.64001E",
+        "acodec": None,
+        "has_audio": False,
+        "label": "360p MP4 · H.264 (仅视频, 8.9MB)",
     },
 ]
 
@@ -109,6 +127,11 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(payload.encode("utf-8"))
         self.wfile.flush()
 
+    def _sse_data(self, data):
+        payload = f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+        self.wfile.write(payload.encode("utf-8"))
+        self.wfile.flush()
+
     def do_OPTIONS(self):
         self.send_response(204)
         self._cors()
@@ -123,6 +146,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._thumbnail()
         if parsed.path == "/api/subtitle":
             return self._subtitle(parsed)
+        if parsed.path.startswith("/api/download/progress/"):
+            return self._download_progress()
+        if parsed.path.startswith("/api/download/file/"):
+            return self._download_file()
         if parsed.path == "/api/auth/me":
             return self._me()
         self._json({"code": "NOT_FOUND", "message": "not found", "detail": None}, 404)
@@ -132,6 +159,7 @@ class Handler(BaseHTTPRequestHandler):
         routes = {
             "/api/parse": self._parse,
             "/api/download": self._download,
+            "/api/download/start": self._download_start,
             "/api/direct-url": self._direct_url,
             "/api/subtitle/download": self._subtitle_download,
             "/api/summarize": self._summarize,
@@ -170,6 +198,40 @@ class Handler(BaseHTTPRequestHandler):
         body = self._body()
         if not body.get("format_id"):
             return self._json({"code": "FORMAT_NOT_FOUND", "message": "format_id required", "detail": None}, 400)
+        self._text("mock video bytes", content_type="video/mp4", filename="mock-video.mp4")
+
+    def _download_start(self):
+        body = self._body()
+        if not body.get("format_id"):
+            return self._json({"code": "FORMAT_NOT_FOUND", "message": "format_id required", "detail": None}, 400)
+        self._json({"success": True, "data": {"task_id": "mock-task"}})
+
+    def _download_progress(self):
+        self._sse_start()
+        total = 75219776
+        for percent in (5, 25, 60, 90):
+            self._sse_data(
+                {
+                    "status": "downloading",
+                    "percent": percent,
+                    "downloaded": total * percent // 100,
+                    "total": total,
+                    "speed": 2500000,
+                    "eta": 10,
+                }
+            )
+            time.sleep(0.3)
+        self._sse_data(
+            {
+                "status": "done",
+                "percent": 100,
+                "downloaded": total,
+                "total": total,
+                "filename": "mock-video.mp4",
+            }
+        )
+
+    def _download_file(self):
         self._text("mock video bytes", content_type="video/mp4", filename="mock-video.mp4")
 
     def _direct_url(self):

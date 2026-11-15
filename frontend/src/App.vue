@@ -42,6 +42,7 @@
               <VideoResult
                 :video="videoData"
                 :downloading="downloading"
+                :progress="downloadProgress"
                 :summarizing="summarizing"
                 @download="handleDownload"
                 @summarize="handleSummarize"
@@ -89,7 +90,7 @@ import ComparisonSection from './components/ComparisonSection.vue'
 import PlatformSection from './components/PlatformSection.vue'
 import AppFooter from './components/AppFooter.vue'
 import AuthModal from './components/AuthModal.vue'
-import { parseVideo, downloadViaServer } from './api/video.js'
+import { parseVideo, startDownload, getDownloadProgressUrl, downloadTaskFile } from './api/video.js'
 import { getSavedUser, fetchMe, logout as logoutApi, isLoggedIn } from './api/auth.js'
 
 const demoMode = ref(false)
@@ -148,6 +149,7 @@ async function restoreUser() {
 // ===== 视频功能 =====
 const loading = ref(false)
 const downloading = ref(false)
+const downloadProgress = ref(null)
 const videoData = ref(null)
 const currentUrl = ref('')
 const summaryKey = ref(0)
@@ -196,9 +198,46 @@ async function handleParse(url) {
 
 async function handleDownload(formatId) {
   downloading.value = true
+  downloadProgress.value = { status: 'pending', percent: null, downloaded: 0 }
   clearError()
+  let source = null
   try {
-    const response = await downloadViaServer(currentUrl.value, formatId)
+    const selected = videoData.value?.formats?.find((f) => f.format_id === formatId)
+    const task = await startDownload(
+      currentUrl.value,
+      formatId,
+      selected?.filesize || selected?.filesize_approx || null
+    )
+    await new Promise((resolve, reject) => {
+      source = new EventSource(getDownloadProgressUrl(task.task_id))
+      source.onmessage = (event) => {
+        let data
+        try {
+          data = JSON.parse(event.data)
+        } catch {
+          return
+        }
+        if (data.status === 'done') {
+          source.close()
+          source = null
+          resolve()
+        } else if (data.status === 'error') {
+          source.close()
+          source = null
+          reject(new Error(data.error || '下载失败'))
+        } else {
+          downloadProgress.value = data
+        }
+      }
+      source.onerror = () => {
+        if (!source) return
+        source.close()
+        source = null
+        reject(new Error('下载进度连接中断，请重试'))
+      }
+    })
+
+    const response = await downloadTaskFile(task.task_id)
     const contentDisposition = response.headers['content-disposition']
     let filename = 'video.mp4'
     if (contentDisposition) {
@@ -217,7 +256,9 @@ async function handleDownload(formatId) {
     const msg = detail?.error || detail || err.message
     showError(msg || '下载失败，请稍后重试', () => handleDownload(formatId))
   } finally {
+    if (source) source.close()
     downloading.value = false
+    downloadProgress.value = null
   }
 }
 </script>

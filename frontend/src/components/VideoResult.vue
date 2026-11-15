@@ -60,12 +60,16 @@
       </h4>
 
       <div class="grid grid-cols-1 gap-2.5">
+        <div v-if="!video.formats?.length" class="text-sm text-text-muted text-center py-4">
+          该视频没有可下载的格式，请换一个链接
+        </div>
         <button
           v-for="fmt in video.formats"
           :key="fmt.format_id"
           @click="selectedFormat = fmt.format_id"
+          :disabled="downloading"
           :class="[
-            'flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-all cursor-pointer',
+            'flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-60',
             selectedFormat === fmt.format_id
               ? 'border-primary bg-primary-light ring-1 ring-primary/20'
               : 'border-border-light hover:border-primary/40 hover:bg-gray-50'
@@ -100,8 +104,23 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
           </svg>
-          {{ downloading ? '下载中，请稍候...' : '立即下载' }}
+          {{ downloadLabel }}
         </button>
+        <!-- 下载进度 -->
+        <div v-if="downloading" class="mt-1" data-testid="download-progress">
+          <div class="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+            <div
+              v-if="progressPercent !== null"
+              class="h-full rounded-full bg-primary transition-all duration-300"
+              :style="{ width: progressPercent + '%' }"
+            ></div>
+            <div v-else class="h-full w-1/2 rounded-full bg-primary animate-pulse"></div>
+          </div>
+          <div class="mt-2 flex items-center justify-between gap-3 text-xs text-text-muted">
+            <span class="truncate">{{ progressLabel }}</span>
+            <span v-if="speedLabel" class="flex-shrink-0">{{ speedLabel }}</span>
+          </div>
+        </div>
         <!-- AI 总结按钮（重新总结） -->
         <button
           @click="$emit('summarize')"
@@ -132,9 +151,52 @@ import { ref, computed } from 'vue'
 const props = defineProps({
   video: { type: Object, required: true },
   downloading: Boolean,
+  progress: { type: Object, default: null },
   summarizing: Boolean,
 })
 defineEmits(['download', 'summarize'])
+
+const downloadLabel = computed(() => {
+  if (!props.downloading) return '立即下载'
+  if (props.progress?.status === 'processing') return '正在合并音视频...'
+  if (props.progress?.percent != null) return `下载中 ${Math.round(props.progress.percent)}%`
+  return '下载中，请稍候...'
+})
+
+const progressPercent = computed(() => {
+  const value = props.progress?.percent
+  if (typeof value !== 'number') return null
+  return Math.min(Math.max(value, 0), 100)
+})
+
+const progressLabel = computed(() => {
+  const data = props.progress
+  if (!data || data.status === 'pending') return '正在准备下载...'
+  if (data.status === 'processing') return '正在合并音视频...'
+  const downloaded = formatBytes(data.downloaded)
+  if (progressPercent.value !== null) {
+    const total = data.total ? ` / ${formatBytes(data.total)}` : ''
+    return `${Math.round(progressPercent.value)}% · ${downloaded}${total}`
+  }
+  return downloaded ? `已下载 ${downloaded}` : '正在准备下载...'
+})
+
+const speedLabel = computed(() => {
+  const speed = props.progress?.speed
+  return speed ? `${formatBytes(speed)}/s` : ''
+})
+
+function formatBytes(bytes) {
+  if (!bytes) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  let value = bytes
+  let index = 0
+  while (value >= 1024 && index < units.length - 1) {
+    value /= 1024
+    index++
+  }
+  return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`
+}
 
 const thumbnailUrl = computed(() => {
   if (!props.video.thumbnail) return ''

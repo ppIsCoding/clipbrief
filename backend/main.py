@@ -1,5 +1,9 @@
 import asyncio
+import json
 import os
+import threading
+import time
+import uuid
 from contextlib import asynccontextmanager
 from urllib.parse import unquote
 
@@ -20,6 +24,12 @@ from downloader import VideoDownloader
 
 downloader = VideoDownloader()
 douyin_parser = DouyinParser(download_dir=downloader.DOWNLOAD_DIR)
+
+# 下载任务表：task_id -> 进度/结果，供 SSE 与文件下载使用
+DOWNLOAD_TASKS: dict[str, dict] = {}
+BACKGROUND_TASKS: set = set()
+TASKS_LOCK = threading.Lock()
+TASK_TTL_SECONDS = 15 * 60
 
 CORS_ORIGINS = [
     origin.strip()
@@ -88,6 +98,7 @@ class ParseRequest(BaseModel):
 class DownloadRequest(BaseModel):
     url: str
     format_id: str = "bestvideo+bestaudio/best"
+    expected_size: int | None = None
 
 
 @app.get("/api/health")
@@ -140,6 +151,179 @@ async def download_video(req: DownloadRequest):
             status_code=400,
             detail={"success": False, "error": friendly_error("下载失败", exc)},
         )
+
+
+def _remove_task_file(task_id: str):
+    with TASKS_LOCK:
+        task = DOWNLOAD_TASKS.pop(task_id, None)
+    filepath = task.get("filepath") if task else None
+    if filepath and os.path.exists(filepath):
+        try:
+            os.remove(filepath)
+        except OSError:
+            pass
+
+
+def _cleanup_tasks():
+    """清掉过期任务和下载目录里的残留文件"""
+    now = time.time()
+    with TASKS_LOCK:
+        expired = [
+            task_id
+            for task_id, task in DOWNLOAD_TASKS.items()
+            if now - task.get("created", now) > TASK_TTL_SECONDS
+        ]
+        for task_id in expired:
+            DOWNLOAD_TASKS.pop(task_id, None)
+
+    download_dir = downloader.DOWNLOAD_DIR
+    if not os.path.isdir(download_dir):
+        return
+    for name in os.listdir(download_dir):
+        path = os.path.join(download_dir, name)
+        try:
+            if now - os.path.getmtime(path) > TASK_TTL_SECONDS:
+                os.remove(path)
+        except OSError:
+            pass
+
+
+async def _run_download_task(
+    task_id: str, url: str, format_id: str, expected_size: int | None = None
+):
+    loop = asyncio.get_running_loop()
+
+    def on_progress(progress: dict):
+        with TASKS_LOCK:
+            task = DOWNLOAD_TASKS.get(task_id)
+            if task:
+                task.update(progress)
+
+    try:
+        if is_douyin_url(url):
+            result = await loop.run_in_executor(None, douyin_parser.download, url)
+        else:
+            result = await loop.run_in_executor(
+                None, downloader.download_video, url, format_id, on_progress, expected_size
+            )
+
+        filepath = result["filepath"]
+        if not os.path.exists(filepath):
+            raise RuntimeError("下载的文件不存在")
+
+        with TASKS_LOCK:
+            task = DOWNLOAD_TASKS.get(task_id)
+            if task:
+                task.update(
+                    status="done",
+                    percent=100.0,
+                    filepath=filepath,
+                    filename=result["filename"],
+                    speed=None,
+                    eta=0,
+                )
+    except Exception as exc:
+        with TASKS_LOCK:
+            task = DOWNLOAD_TASKS.get(task_id)
+            if task:
+                task.update(
+                    status="error",
+                    error=friendly_error("下载失败", exc),
+                    speed=None,
+                    eta=None,
+                )
+
+
+@app.post("/api/download/start")
+async def start_download(req: DownloadRequest):
+    """创建下载任务，立即返回 task_id；进度通过 SSE 推送"""
+    _cleanup_tasks()
+    task_id = uuid.uuid4().hex
+    with TASKS_LOCK:
+        DOWNLOAD_TASKS[task_id] = {
+            "task_id": task_id,
+            "status": "pending",
+            "percent": None,
+            "downloaded": 0,
+            "total": None,
+            "speed": None,
+            "eta": None,
+            "filename": None,
+            "filepath": None,
+            "error": None,
+            "created": time.time(),
+        }
+    background_task = asyncio.create_task(
+        _run_download_task(task_id, req.url, req.format_id, req.expected_size)
+    )
+    BACKGROUND_TASKS.add(background_task)
+    background_task.add_done_callback(BACKGROUND_TASKS.discard)
+    return {"success": True, "data": {"task_id": task_id}}
+
+
+@app.get("/api/download/progress/{task_id}")
+async def download_progress(task_id: str):
+    """SSE 推送下载进度，任务结束或出错后关闭"""
+    with TASKS_LOCK:
+        if task_id not in DOWNLOAD_TASKS:
+            raise HTTPException(status_code=404, detail="下载任务不存在或已过期")
+
+    async def event_stream():
+        last_payload = None
+        while True:
+            with TASKS_LOCK:
+                task = DOWNLOAD_TASKS.get(task_id)
+                if not task:
+                    yield 'data: {"status":"error","error":"下载任务已过期"}\n\n'
+                    return
+                payload = {
+                    key: task.get(key)
+                    for key in (
+                        "status",
+                        "percent",
+                        "downloaded",
+                        "total",
+                        "speed",
+                        "eta",
+                        "filename",
+                        "error",
+                    )
+                }
+            if payload != last_payload:
+                yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                last_payload = payload
+            if payload["status"] in ("done", "error"):
+                return
+            await asyncio.sleep(0.3)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/api/download/file/{task_id}")
+async def download_task_file(task_id: str):
+    """下载任务完成后取文件，响应结束后删除临时文件和任务"""
+    with TASKS_LOCK:
+        task = DOWNLOAD_TASKS.get(task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="下载任务不存在或已过期")
+        if task["status"] != "done":
+            raise HTTPException(status_code=400, detail="文件尚未准备好")
+        filepath = task["filepath"]
+        filename = task["filename"]
+
+    if not filepath or not os.path.exists(filepath):
+        raise HTTPException(status_code=410, detail="文件已过期，请重新下载")
+
+    return FileResponse(
+        path=filepath,
+        filename=filename,
+        media_type="application/octet-stream",
+        background=BackgroundTask(_remove_task_file, task_id),
+    )
 
 
 @app.post("/api/direct-url")

@@ -52,6 +52,36 @@ class VideoDownloader:
             return f"{hours}:{minutes:02d}:{secs:02d}"
         return f"{minutes}:{secs:02d}"
 
+    @staticmethod
+    def _codec_priority(vcodec: Optional[str]) -> int:
+        """编码兼容性优先级：H.264 最通用，AV1/VP9 部分播放器打不开"""
+        codec = (vcodec or "").split(".")[0].lower()
+        if codec in ("h264", "avc1"):
+            return 0
+        if codec in ("hevc", "h265", "hev1", "hvc1"):
+            return 1
+        if codec in ("av01", "av1"):
+            return 2
+        if codec in ("vp9", "vp09"):
+            return 3
+        return 5
+
+    @staticmethod
+    def _codec_label(vcodec: Optional[str]) -> str:
+        codec = (vcodec or "").split(".")[0].lower()
+        return {
+            "h264": "H.264",
+            "avc1": "H.264",
+            "hevc": "H.265",
+            "h265": "H.265",
+            "hev1": "H.265",
+            "hvc1": "H.265",
+            "av01": "AV1",
+            "av1": "AV1",
+            "vp9": "VP9",
+            "vp09": "VP9",
+        }.get(codec, codec.upper() or "未知")
+
     def parse_video(self, url: str) -> dict:
         """解析视频信息，不下载文件"""
         ydl_opts = {
@@ -91,6 +121,16 @@ class VideoDownloader:
         if not raw_formats:
             return []
 
+        # 同清晰度优先保留 H.264，兼容 Windows 自带播放器
+        raw_formats = sorted(
+            raw_formats,
+            key=lambda f: (
+                f.get("height") or 0,
+                -self._codec_priority(f.get("vcodec")),
+            ),
+            reverse=True,
+        )
+
         seen = set()
         results = []
 
@@ -109,12 +149,13 @@ class VideoDownloader:
             resolution = f"{f.get('width', '?')}x{height}" if height else "未知"
             filesize = f.get("filesize") or f.get("filesize_approx")
             size_label = self._format_filesize(filesize)
+            codec_label = self._codec_label(vcodec)
 
             if has_audio:
-                label = f"{height}p {ext.upper()} ({size_label})"
+                label = f"{height}p {ext.upper()} · {codec_label} ({size_label})"
                 key = (height, ext, "av")
             else:
-                label = f"{height}p {ext.upper()} (仅视频, {size_label})"
+                label = f"{height}p {ext.upper()} · {codec_label} (仅视频, {size_label})"
                 key = (height, ext, "v")
 
             if key in seen:
@@ -138,10 +179,28 @@ class VideoDownloader:
 
         if not any(r["has_audio"] for r in results) and results:
             best_video = results[0]
+            audio_size = max(
+                (
+                    f.get("filesize") or f.get("filesize_approx") or 0
+                    for f in raw_formats
+                    if (f.get("vcodec") in (None, "none"))
+                    and f.get("acodec") not in (None, "none")
+                ),
+                default=0,
+            )
+            merged_size = (best_video.get("filesize") or 0) + audio_size
             merged = {
                 **best_video,
                 "format_id": f"bestvideo+bestaudio/best",
-                "label": f"{best_video['height']}p 最佳 (视频+音频合并)",
+                "filesize": merged_size or best_video.get("filesize"),
+                "filesize_approx": merged_size or best_video.get("filesize_approx"),
+                "label": (
+                    f"{best_video['height']}p 最佳 ({self._codec_label(best_video.get('vcodec'))}, "
+                    f"视频+音频合并, {self._format_filesize(merged_size)})"
+                    if merged_size
+                    else f"{best_video['height']}p 最佳 "
+                    f"({self._codec_label(best_video.get('vcodec'))}, 视频+音频合并)"
+                ),
                 "has_audio": True,
                 "acodec": "merged",
             }
@@ -149,8 +208,17 @@ class VideoDownloader:
 
         return results[:15]
 
-    def download_video(self, url: str, format_id: str) -> dict:
-        """下载视频到服务器临时目录，返回文件路径和元数据"""
+    def download_video(
+        self,
+        url: str,
+        format_id: str,
+        progress_callback=None,
+        expected_bytes: int | None = None,
+    ) -> dict:
+        """下载视频到服务器临时目录，返回文件路径和元数据
+
+        progress_callback: 可选，接收下载进度 dict（percent/downloaded/total/speed/eta/status）
+        """
         if not self.has_ffmpeg and "+" in format_id:
             format_id = "best"
 
@@ -158,6 +226,7 @@ class VideoDownloader:
         ydl_opts = {
             "format": format_id,
             "outtmpl": os.path.join(self.DOWNLOAD_DIR, f"%(title)s-{token}.%(ext)s"),
+            "format_sort": ["vcodec:h264", "acodec:aac"],
             "quiet": True,
             "no_warnings": True,
             "noplaylist": True,
@@ -170,8 +239,98 @@ class VideoDownloader:
         if cookies_file := os.getenv("COOKIES_FILE"):
             ydl_opts["cookiefile"] = cookies_file
 
+        if progress_callback is not None:
+            # 预解析一次，拿到实际会下载的流和大小，避免合并档进度分母不准
+            probe_opts = dict(ydl_opts)
+            try:
+                with yt_dlp.YoutubeDL(probe_opts) as probe:
+                    probe_info = probe.extract_info(url, download=False)
+                requested = probe_info.get("requested_formats") or []
+                probed_size = sum(
+                    (f.get("filesize") or f.get("filesize_approx") or 0)
+                    for f in requested
+                )
+                if not probed_size:
+                    probed_size = (
+                        probe_info.get("filesize")
+                        or probe_info.get("filesize_approx")
+                        or 0
+                    )
+                if probed_size:
+                    expected_bytes = probed_size
+            except Exception:
+                pass
+
+        downloaded_by_file: dict[str, int] = {}
+        finished_files: set[str] = set()
+
+        def _progress_hook(data):
+            if progress_callback is None:
+                return
+            status = data.get("status")
+            if status not in ("downloading", "finished"):
+                return
+
+            filename = data.get("filename") or ""
+            downloaded = data.get("downloaded_bytes") or 0
+            if filename:
+                downloaded_by_file[filename] = max(
+                    downloaded_by_file.get(filename, 0), downloaded
+                )
+                if status == "finished":
+                    finished_files.add(filename)
+
+            total_downloaded = sum(downloaded_by_file.values())
+            info = data.get("info_dict") or {}
+            requested = info.get("requested_formats") or []
+            expected = expected_bytes or 0
+            if not expected:
+                expected = sum(
+                    (f.get("filesize") or f.get("filesize_approx") or 0)
+                    for f in requested
+                )
+            if not expected:
+                expected = data.get("total_bytes") or data.get("total_bytes_estimate") or 0
+
+            all_files_done = len(finished_files) >= len(requested) if requested else True
+            reached_expected = bool(expected) and total_downloaded >= expected * 0.98
+            if status == "finished" and (reached_expected or (not expected and all_files_done)):
+                progress_callback({
+                    "status": "processing",
+                    "percent": 99.0,
+                    "downloaded": total_downloaded,
+                    "total": expected or None,
+                    "speed": None,
+                    "eta": None,
+                })
+                return
+
+            percent = None
+            if expected:
+                percent = min(total_downloaded / expected * 100, 99.0)
+            progress_callback({
+                "status": "downloading",
+                "percent": round(percent, 1) if percent is not None else None,
+                "downloaded": total_downloaded,
+                "total": expected or None,
+                "speed": data.get("speed"),
+                "eta": data.get("eta"),
+            })
+
+        if progress_callback is not None:
+            ydl_opts["progress_hooks"] = [_progress_hook]
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
+            try:
+                info = ydl.extract_info(url, download=True)
+            except Exception:
+                for name in os.listdir(self.DOWNLOAD_DIR):
+                    if token in name:
+                        try:
+                            os.remove(os.path.join(self.DOWNLOAD_DIR, name))
+                        except OSError:
+                            pass
+                raise
 
         if not info:
             raise ValueError("下载失败")
