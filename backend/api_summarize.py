@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from auth import get_optional_user
 from database import check_summary_quota, increment_summary, FREE_DAILY_SUMMARY_LIMIT
+from security import UnsafeURLError, validate_public_url
 
 router = APIRouter(prefix="/api", tags=["AI 总结"])
 
@@ -62,6 +63,15 @@ async def summarize_video(req: SummarizeRequest, user: dict | None = Depends(get
     AI 视频总结（SSE 流式）
     事件类型: subtitle / summary / mindmap / done / error / quota
     """
+    try:
+        validate_public_url(req.url)
+    except UnsafeURLError as exc:
+        yield ServerSentEvent(
+            raw_data=json.dumps({"message": str(exc)}, ensure_ascii=False),
+            event="error",
+        )
+        return
+
     allowed, remaining, message = _check_summary_permission(user)
     if not allowed:
         yield ServerSentEvent(
@@ -121,6 +131,15 @@ async def summarize_video(req: SummarizeRequest, user: dict | None = Depends(get
 @router.post("/chat", response_class=EventSourceResponse)
 async def chat_with_video(req: ChatRequest, user: dict | None = Depends(get_optional_user)) -> AsyncIterable[ServerSentEvent]:
     """AI 视频问答（SSE 流式）"""
+    try:
+        validate_public_url(req.url)
+    except UnsafeURLError as exc:
+        yield ServerSentEvent(
+            raw_data=json.dumps({"message": str(exc)}, ensure_ascii=False),
+            event="error",
+        )
+        return
+
     try:
         if not req.subtitle_text.strip():
             loop = asyncio.get_event_loop()

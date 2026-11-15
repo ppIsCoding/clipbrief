@@ -21,6 +21,7 @@ from starlette.background import BackgroundTask
 from database import init_db
 from douyin import DouyinParser, is_douyin_url
 from downloader import VideoDownloader
+from security import UnsafeURLError, validate_public_url
 
 downloader = VideoDownloader()
 douyin_parser = DouyinParser(download_dir=downloader.DOWNLOAD_DIR)
@@ -91,6 +92,16 @@ def friendly_error(prefix: str, exc: Exception) -> str:
     return f"{prefix}: {text[:200]}"
 
 
+def _check_url(url: str) -> None:
+    try:
+        validate_public_url(url)
+    except UnsafeURLError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"success": False, "error": str(exc)},
+        )
+
+
 class ParseRequest(BaseModel):
     url: str
 
@@ -109,6 +120,7 @@ async def health_check():
 @app.post("/api/parse")
 async def parse_video(req: ParseRequest):
     """解析视频信息（抖音走专用模块，其他走 yt-dlp）"""
+    _check_url(req.url)
     try:
         loop = asyncio.get_event_loop()
         if is_douyin_url(req.url):
@@ -126,6 +138,7 @@ async def parse_video(req: ParseRequest):
 @app.post("/api/download")
 async def download_video(req: DownloadRequest):
     """服务端下载视频后返回文件（抖音走专用模块）"""
+    _check_url(req.url)
     try:
         loop = asyncio.get_event_loop()
         if is_douyin_url(req.url):
@@ -237,6 +250,7 @@ async def _run_download_task(
 @app.post("/api/download/start")
 async def start_download(req: DownloadRequest):
     """创建下载任务，立即返回 task_id；进度通过 SSE 推送"""
+    _check_url(req.url)
     _cleanup_tasks()
     task_id = uuid.uuid4().hex
     with TASKS_LOCK:
@@ -329,6 +343,7 @@ async def download_task_file(task_id: str):
 @app.post("/api/direct-url")
 async def get_direct_url(req: DownloadRequest):
     """获取视频直链"""
+    _check_url(req.url)
     try:
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
@@ -345,8 +360,7 @@ async def get_direct_url(req: DownloadRequest):
 @app.get("/api/proxy/thumbnail")
 async def proxy_thumbnail(url: str = Query(..., description="缩略图 URL")):
     """代理获取视频缩略图，绕过防盗链"""
-    if not url.startswith(("http://", "https://")):
-        raise HTTPException(status_code=400, detail="仅支持 http/https 链接")
+    _check_url(url)
     try:
         async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
             resp = await client.get(
