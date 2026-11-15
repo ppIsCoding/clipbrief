@@ -62,7 +62,6 @@ backend/     FastAPI 服务：解析、下载、总结、用户
 frontend/    Vue 3 前端
 mock/        无依赖 Mock 服务
 docs/        接口契约、组件树、测试用例、Git 约定
-scripts/     提交脚本
 ```
 
 ## 文档
