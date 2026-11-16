@@ -20,6 +20,9 @@ from security import (
 
 router = APIRouter(prefix="/api", tags=["AI 总结"])
 
+MAX_CHAT_QUESTION_CHARS = 500
+MAX_CHAT_SUBTITLE_CHARS = 20000
+
 
 class SummarizeRequest(BaseModel):
     url: str
@@ -158,7 +161,31 @@ async def summarize_video(req: SummarizeRequest, user: dict | None = Depends(get
 
 @router.post("/chat", response_class=EventSourceResponse)
 async def chat_with_video(req: ChatRequest, user: dict | None = Depends(get_optional_user)) -> AsyncIterable[ServerSentEvent]:
-    """AI 视频问答（SSE 流式）"""
+    """AI 视频问答（SSE 流式，登录后可用，不占总结配额）"""
+    if not user:
+        yield ServerSentEvent(
+            raw_data=json.dumps({"message": "请先登录后使用 AI 问答", "need_login": True}, ensure_ascii=False),
+            event="error",
+        )
+        return
+
+    question = (req.question or "").strip()
+    if not question:
+        yield ServerSentEvent(
+            raw_data=json.dumps({"message": "问题不能为空"}, ensure_ascii=False),
+            event="error",
+        )
+        return
+    if len(question) > MAX_CHAT_QUESTION_CHARS:
+        yield ServerSentEvent(
+            raw_data=json.dumps(
+                {"message": f"问题最多 {MAX_CHAT_QUESTION_CHARS} 字，请缩短后再试"},
+                ensure_ascii=False,
+            ),
+            event="error",
+        )
+        return
+
     try:
         url = extract_share_url(req.url)
         validate_public_url(url)
@@ -187,8 +214,9 @@ async def chat_with_video(req: ChatRequest, user: dict | None = Depends(get_opti
         else:
             subtitle_text = req.subtitle_text
 
+        subtitle_text = subtitle_text[:MAX_CHAT_SUBTITLE_CHARS]
         summarizer = _get_summarizer()
-        for token in summarizer.chat_stream(subtitle_text, req.question):
+        for token in summarizer.chat_stream(subtitle_text, question):
             yield ServerSentEvent(raw_data=json.dumps(token, ensure_ascii=False), event="answer")
 
         yield ServerSentEvent(raw_data="[DONE]", event="done")
