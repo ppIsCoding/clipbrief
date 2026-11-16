@@ -246,6 +246,10 @@ Content-Disposition: attachment; filename*=utf-8''...
 
 事件：`answer`（JSON 字符串增量）、`done`、`error`。
 
+- 必须登录，未登录返回 `error` 事件，`need_login: true`
+- 不占每日 3 次总结配额
+- `question` 最多 500 字，`subtitle_text` 最多 20,000 字，超出会截断或提示
+
 ## 5. 用户与配额
 
 ### POST /auth/register
