@@ -62,6 +62,10 @@
               <span class="w-1.5 h-1.5 bg-primary rounded-full animate-pulse"></span>
               AI 正在生成中...
             </div>
+            <!-- 长视频截断提示 -->
+            <div v-if="isLongSubtitle" class="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-700 leading-relaxed">
+              字幕共 {{ subtitleCharCount.toLocaleString() }} 字。总结只读前 15,000 字，问答只读前 20,000 字，长视频的内容可能不完整。
+            </div>
             <!-- 免费用户剩余次数提示 -->
             <div v-if="quotaInfo && quotaInfo.remaining >= 0 && !loading" class="mt-4 p-3 rounded-xl bg-blue-50 border border-blue-100">
               <span class="text-sm text-blue-700">
@@ -265,7 +269,8 @@
                   v-model="chatInput"
                   @keydown.enter.prevent="sendQuestion"
                   type="text"
-                  placeholder="输入你的问题..."
+                  maxlength="500"
+                  placeholder="输入你的问题（最多 500 字）"
                   class="flex-1 h-11 px-4 rounded-xl border border-border bg-white text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
                   :disabled="chatLoading"
                 />
@@ -291,7 +296,7 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { marked } from 'marked'
 import { Transformer } from 'markmap-lib'
 import { Markmap } from 'markmap-view'
@@ -319,6 +324,8 @@ const summaryError = ref('')
 
 const summaryText = ref('')
 const subtitleData = ref({ segments: [], has_subtitle: false })
+const subtitleCharCount = computed(() => (subtitleData.value.full_text || '').length)
+const isLongSubtitle = computed(() => subtitleCharCount.value > 15000)
 const subtitleExpanded = ref(false)
 const mindmapMarkdown = ref('')
 const mindmapSvg = ref(null)
@@ -332,7 +339,6 @@ const chatLoading = ref(false)
 const chatContainer = ref(null)
 
 const renderedSummary = ref('')
-
 // 思维导图全屏状态
 const isFullscreen = ref(false)
 
@@ -812,6 +818,11 @@ async function sendQuestion() {
           chatLoading.value = false
           try {
             const parsed = JSON.parse(data)
+            if (parsed.need_login) {
+              loginRequired.value = true
+              chatMessages.value.pop()
+              return
+            }
             aiMessage.content = '❌ ' + (parsed.message || '回答失败')
           } catch (e) {
             aiMessage.content = '❌ 回答失败'
